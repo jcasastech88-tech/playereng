@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reproductor Pro</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #050505;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: none;
+            z-index: 1;
+        }
+        
+        .overlay-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            transition: opacity 0.5s ease;
+            background: rgba(5, 5, 5, 0.85);
+        }
+
+        .backdrop-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+            background-position: center;
+            filter: blur(15px) brightness(0.4);
+            transform: scale(1.1);
+            z-index: -1;
+        }
+
+        .meta-content {
+            text-align: center;
+            color: #fff;
+            margin-bottom: 30px;
+            max-width: 85%;
+            animation: fadeIn 0.8s ease;
+        }
+        .media-title {
+            font-size: 2.2rem;
+            font-weight: bold;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+            margin-bottom: 5px;
+        }
+        .episode-title {
+            font-size: 1.2rem;
+            color: #cccccc;
+            margin-bottom: 15px;
+            font-weight: 400;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+        }
+        .badges {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            align-items: center;
+        }
+        .badge-lang {
+            background: #00aa66;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+
+        .play-btn {
+            width: 90px;
+            height: 90px;
+            background: #ff0055;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            box-shadow: 0 0 25px rgba(255, 0, 85, 0.6);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .play-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 35px rgba(255, 0, 85, 0.9);
+        }
+        .play-icon {
+            width: 0; height: 0;
+            border-top: 15px solid transparent;
+            border-bottom: 15px solid transparent;
+            border-left: 25px solid #fff;
+            margin-left: 8px;
+        }
+
+        .status-text {
+            color: #ffffff;
+            margin-top: 25px;
+            font-size: 1.1rem;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+
+        .spinner {
+            display: none;
+            width: 40px; height: 40px;
+            border: 4px solid rgba(255,255,255,0.1);
+            border-radius: 50%;
+            border-top-color: #ff0055;
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        .error-msg { color: #ff4444; display: none; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div id="overlay" class="overlay-screen">
+            <div id="backdrop" class="backdrop-bg"></div>
+            <div id="spinner" class="spinner"></div>
+            
+            <div id="metaContent" class="meta-content" style="display: none;">
+                <h1 id="mediaTitle" class="media-title">Cargando...</h1>
+                <div id="episodeTitle" class="episode-title" style="display: none;"></div>
+                <div class="badges">
+                    <span class="badge-lang">English</span>
+                </div>
+            </div>
+
+            <div id="playContainer" onclick="procesarVideo()" style="display: none;">
+                <div class="play-btn">
+                    <div class="play-icon"></div>
+                </div>
+            </div>
+
+            <div id="status" class="status-text">Cargando información...</div>
+            <div id="error" class="error-msg"><h2>Enlace no disponible</h2></div>
+        </div>
+
+        <iframe id="player" allowfullscreen allow="autoplay; encrypted-media"></iframe>
+    </div>
+
+    <script>
+        const TMDB_API_KEY = '51800c8d9e13631a7ded6f17f363e7a5'; // Pon tu clave de TMDB aquí
+        let urlDecodificada = "";
+
+        async function inicializar() {
+    const hashRaw = window.location.hash.substring(1);
+    // Cambiamos el separador de '/' a '-' para evitar conflictos con Base64
+    const partes = hashRaw.split('-'); 
+
+    // Caso 1: Es un capítulo específico (tv-id-temporada-episodio-base64) -> Tiene 5 partes
+    if (partes.length === 5) {
+        const tipo = partes[0];      // 'tv'
+        const tmdbId = partes[1];    // ID serie
+        const temporada = partes[2]; // Num temporada
+        const episodio = partes[3];  // Num episodio
+        const base64Url = partes[4]; // Enlace cifrado
+
+        procesarParametros(base64Url, () => obtenerDatosEpisodioTMDB(tmdbId, temporada, episodio));
+    } 
+    // Caso 2: Es película o serie general (movie o tv - id - base64) -> Tiene 3 partes
+    else if (partes.length === 3) {
+        const tipo = partes[0];      // 'movie' o 'tv'
+        const tmdbId = partes[1];    // ID
+        const base64Url = partes[2]; // Enlace cifrado
+
+        procesarParametros(base64Url, () => obtenerDatosGeneralesTMDB(tipo, tmdbId));
+    } 
+    else {
+        mostrarError("Estructura de enlace no reconocida.");
+    }
+}
+
+function procesarParametros(base64Url, funcionTMDB) {
+    try {
+        // Decodificar Base64 de forma segura
+        const urlReal = atob(base64Url);
+        if (urlReal.startsWith('http://') || urlReal.startsWith('https://')) {
+            urlDecodificada = urlReal;
+        } else { 
+            throw new Error(); 
+        }
+
+        // Ejecutar consulta a TMDB
+        funcionTMDB().then(() => {
+            document.getElementById('playContainer').style.display = 'flex';
+            document.getElementById('metaContent').style.display = 'block';
+            document.getElementById('status').innerText = "Haz clic para reproducir";
+        }).catch(() => {
+            // Si TMDB falla, igual permite reproducir
+            document.getElementById('mediaTitle').innerText = "Video Disponible";
+            document.getElementById('playContainer').style.display = 'flex';
+            document.getElementById('metaContent').style.display = 'block';
+            document.getElementById('status').innerText = "Haz clic para reproducir";
+        });
+
+    } catch (e) {
+        console.error("Error decodificando el enlace:", e);
+        mostrarError("El enlace de video está corrupto o incompleto.");
+    }
+}
+
+        // Consulta para Películas o Series generales
+        async function obtenerDatosGeneralesTMDB(tipo, id) {
+            const url = `https://api.themoviedb.org/3/${tipo}/${id}?api_key=${TMDB_API_KEY}&language=es-ES`;
+            try {
+                const respuesta = await fetch(url);
+                if (!respuesta.ok) return;
+                const datos = await respuesta.json();
+                
+                document.getElementById('mediaTitle').innerText = datos.title || datos.name;
+                if (datos.backdrop_path) {
+                    document.getElementById('backdrop').style.backgroundImage = `url('https://image.tmdb.org/t/p/w1280${datos.backdrop_path}')`;
+                }
+            } catch (error) { console.log(error); }
+        }
+
+        // Consulta específica para un Capítulo
+        async function obtenerDatosEpisodioTMDB(idSerie, temp, ep) {
+            // Buscamos primero los datos del capítulo
+            const urlEpisodio = `https://api.themoviedb.org/3/tv/${idSerie}/season/${temp}/episode/${ep}?api_key=${TMDB_API_KEY}&language=es-ES`;
+            // Buscamos también la serie para heredar el Backdrop (fondo) principal
+            const urlSerie = `https://api.themoviedb.org/3/tv/${idSerie}?api_key=${TMDB_API_KEY}&language=es-ES`;
+
+            try {
+                const [resEp, resSerie] = await Promise.all([fetch(urlEpisodio), fetch(urlSerie)]);
+                
+                if (resEp.ok) {
+                    const datosEp = await resEp.json();
+                    // Ejemplo: "Temporada 1 - Episodio 5"
+                    document.getElementById('mediaTitle').innerText = `T${temp} × E${ep}`;
+                    // Subtítulo: El nombre del capítulo ("Nombre del capítulo")
+                    if(datosEp.name) {
+                        const epTitleDiv = document.getElementById('episodeTitle');
+                        epTitleDiv.innerText = datosEp.name;
+                        epTitleDiv.style.display = 'block';
+                    }
+                }
+                
+                if (resSerie.ok) {
+                    const datosSerie = await resSerie.json();
+                    // Si el capítulo no cargó el título por algún motivo, usamos el de la serie
+                    if (document.getElementById('mediaTitle').innerText === "Cargando...") {
+                        document.getElementById('mediaTitle').innerText = datosSerie.name;
+                    } else {
+                        // Si ya tiene el "T1 x E5", le añadimos el nombre de la serie al principio
+                        document.getElementById('mediaTitle').innerText = `${datosSerie.name} (${document.getElementById('mediaTitle').innerText})`;
+                    }
+
+                    if (datosSerie.backdrop_path) {
+                        document.getElementById('backdrop').style.backgroundImage = `url('https://image.tmdb.org/t/p/w1280${datosSerie.backdrop_path}')`;
+                    }
+                }
+            } catch (error) { console.log(error); }
+        }
+
+        function procesarVideo() {
+            if (!urlDecodificada) return;
+
+            document.getElementById('playContainer').style.display = 'none';
+            document.getElementById('metaContent').style.display = 'none';
+            document.getElementById('spinner').style.display = 'block';
+            document.getElementById('status').innerText = "Generando entorno seguro...";
+
+            setTimeout(() => {
+                const iframe = document.getElementById('player');
+                const overlay = document.getElementById('overlay');
+                
+                iframe.src = urlDecodificada;
+                iframe.style.display = 'block';
+
+                overlay.style.opacity = '0';
+                setTimeout(() => { overlay.style.display = 'none'; }, 500);
+            }, 1300);
+        }
+
+        function mostrarError(msg) {
+            document.getElementById('playContainer').style.display = 'none';
+            document.getElementById('metaContent').style.display = 'none';
+            document.getElementById('spinner').style.display = 'none';
+            document.getElementById('status').style.display = 'none';
+            if(msg) document.getElementById('error').innerHTML = `<h2>${msg}</h2>`;
+            document.getElementById('error').style.display = 'block';
+        }
+
+        window.onload = inicializar;
+    </script>
+</body>
+</html>
