@@ -251,9 +251,9 @@ function procesarParametros(base64Url, funcionTMDB) {
         // Consulta específica para un Capítulo
         async function obtenerDatosEpisodioTMDB(idSerie, temp, ep) {
             // Buscamos primero los datos del capítulo
-            const urlEpisodio = `https://api.themoviedb.org/3/tv/${idSerie}/season/${temp}/episode/${ep}?api_key=${TMDB_API_KEY}&language=es-ES`;
+            const urlEpisodio = `https://api.themoviedb.org/3/tv/${idSerie}/season/${temp}/episode/${ep}?api_key=${TMDB_API_KEY}&language=en-US`;
             // Buscamos también la serie para heredar el Backdrop (fondo) principal
-            const urlSerie = `https://api.themoviedb.org/3/tv/${idSerie}?api_key=${TMDB_API_KEY}&language=es-ES`;
+            const urlSerie = `https://api.themoviedb.org/3/tv/${idSerie}?api_key=${TMDB_API_KEY}&language=en-US`;
 
             try {
                 const [resEp, resSerie] = await Promise.all([fetch(urlEpisodio), fetch(urlSerie)]);
