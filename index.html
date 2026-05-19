@@ -235,7 +235,7 @@ function procesarParametros(base64Url, funcionTMDB) {
 
         // Consulta para Películas o Series generales
         async function obtenerDatosGeneralesTMDB(tipo, id) {
-            const url = `https://api.themoviedb.org/3/${tipo}/${id}?api_key=${TMDB_API_KEY}&language=es-ES`;
+            const url = `https://api.themoviedb.org/3/${tipo}/${id}?api_key=${TMDB_API_KEY}&language=en-US`;
             try {
                 const respuesta = await fetch(url);
                 if (!respuesta.ok) return;
